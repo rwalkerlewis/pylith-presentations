@@ -50,6 +50,7 @@
 
   \begin{description}
     \item[Step 1] \highlight{Magma influx with displacement and pressure boundary conditions}
+    \item[Step 2] \highlight{Magma influx with updating porosity, displacement and pressure boundary conditions} 
   \end{description}
   
 \end{frame}
@@ -159,6 +160,39 @@
       
 \end{frame}
 
+
+% ------------------------------------------------------------ SLIDE
+\begin{frame}
+  \frametitle{Auxiliary Fields}
+  \summary{for Quasistatic Linear Isotropic Poroelasticity}
+  
+      \begin{table}[htbp]
+      \resizebox{\textheight}{!}{\begin{tabular}{lllll}
+        \hline
+        {\bf Origin} &{\bf Variable} & {\bf Description} & {\bf Position} & {\bf Notes} \\
+        \hline
+        Material & $\rho_b$ & Rock Density    & $0$ &\\
+                 & $\rho_f$ & Fluid Density   & $1$ &\\
+                 & $\mu_f$  & Fluid Viscosity & $2$ &\\
+                 & $\phi$   & Porosity        & $3$ &\\
+                 & $\vec{f}_{b}$ & Body Force  & $+1$ &\\
+                 & $\vec{g}$ & Gravity        & $+1$ &\\
+                 & $\gamma$ & Fluid Source  & $+1$ &\\
+        \hline
+        Rheology & $\tensor{\sigma}_{R}$ & Reference Stress & NumAux - 7 &\\
+                 & $\tensor{\epsilon}_{R}$ & Reference Strain & NumAux - 6 &\\
+                 & $G$ & Shear Modulus & NumAux - 5 &\\
+                 & $K_d$ & Drained Bulk Modulus & NumAux - 4 &\\
+                 & $\alpha$ & Biot Coefficient & NumAux - 3 &\\
+                 & $M$ & Biot Modulus & NumAux - 2 & $\frac{K_{f}}{\phi} + \frac{K_{s}}{\alpha - \phi}$ \\
+                 & $\tensor{k}$ & Permeability & NumAux - 1 & \\
+        \hline
+         Input   & $K_s$ & Solid Grain Bulk Modulus & - & \\
+                         & $K_f$ & Fluid Bulk Modulus & - & \\            
+        \hline
+    \end{tabular}}
+    \end{table}
+\end{frame}
 
 % ------------------------------------------------------------ SLIDE
 \begin{frame}[t,fragile]
@@ -343,6 +377,190 @@ pylith step01_inflation.cfg
     
 \end{frame}
 
+
+% ------------------------------------------------------------ SLIDE
+\begin{frame}
+  \frametitle{Step 2: Physics}
+  \summary{}
+
+  \begin{minipage}{0.35\textwidth}
+    {\scriptsize
+      \begin{gather*}
+        % Solution
+        \vec{s} = \left(\vec{u} \quad p \quad \epsilon_v \quad \vec{v} \quad P_{dot} \quad E_{dot}\right)^T \\
+        % Elasticity
+        \nabla \cdot \boldsymbol{\sigma}(\vec{u},p) = \vec{0} \\
+        % Pressure
+        \frac{\partial \zeta(\vec{u},p)}{\partial t} + \nabla \cdot \vec{q}(p) = 0 \\
+        % Vol. Strain
+        \nabla \cdot \vec{u} - \epsilon_{v} = 0 \\
+        % Velocity
+        \dot{\vec{u}} - \vec{0} = \vec{0} \\
+        % P dot
+        \dot{p} - P_{dot} = 0 \\
+        % E dot
+        \dot{\epsilon}_{v} - E_{dot} = 0 \\
+        % Dirichlet displacement
+        u_x = 0 \text{ on boundary\_xneg} \\
+        u_x = 0 \text{ on boundary\_xpos} \\
+        u_y = 0 \text{ on boundary\_yneg} \\
+        % Dirichlet pressure
+        p = 0 \text{ on boundary\_ypos} \\
+        p = 10 \text{\,MPa on boundary\_flow} \\
+        p(t=0) = 5 \text{\,MPa  in domain}
+    \end{gather*}}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.55\textwidth}
+    \includefigure[height=6.5cm]{figs/step01-diagram}
+  \end{minipage}
+      
+\end{frame}
+
+% ------------------------------------------------------------ SLIDE
+\begin{frame}[t,fragile]
+  \frametitle{Step 1: Physics to simulation parameters}
+  \summary{}
+
+  \begin{minipage}[t]{0.3\textwidth}
+    {\scriptsize
+    \begin{gather*}
+        % Solution
+        \vec{s} = \left(\vec{u} \quad p \quad \epsilon_v \quad \vec{v} \quad P_{dot} \quad E_{dot}\right)^T \\
+        % Elasticity
+        \nabla \cdot \boldsymbol{\sigma}(\vec{u},p) = \vec{0} \\
+        % Pressure
+        \frac{\partial \zeta(\vec{u},p)}{\partial t} + \nabla \cdot \vec{q}(p) = 0 \\
+        % Vol. Strain
+        \nabla \cdot \vec{u} - \epsilon_{v} = 0 \\
+        % Velocity
+        \dot{\vec{u}} - \vec{0} = \vec{0} \\
+        % P dot
+        \dot{p} - P_{dot} = 0 \\
+        % E dot
+        \dot{\epsilon}_{v} - E_{dot} = 0 \\
+        % Dirichlet displacement
+        u_x = 0 \text{ on boundary\_xneg} \tikzmark{bc1}\\
+        u_x = 0 \text{ on boundary\_xpos} \\
+        u_y = 0 \text{ on boundary\_yneg} \\
+        % Dirichlet pressure
+        p = 0 \text{ on boundary\_ypos} \\
+        p = 10 \text{\,MPa on boundary\_flow} \\
+        p(t=0) = 5 \text{\,MPa in domain} \tikzmark{ic1}
+    \end{gather*}}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[t]{0.67\textwidth}
+    \begin{onlyenv}<2>
+      \tikzmark{solution1-cfg}
+      \begin{equation*}
+        \frac{\partial \phi}{\partial t} = \left(\alpha - \phi\right) \dot{\epsilon}_{v} + \frac{\left(1 - \alpha\right)\left(\alpha - \phi\right)}{K_{dr}} \dot{p}
+      \end{equation*}
+      \begin{equation*}
+        \phi^{n+1} =  \phi^{n} + \left[\left(\alpha - \phi^{n}\right) \dot{\epsilon}^{n}_{v} + \frac{\left(1 - \alpha\right)\left(\alpha - \phi^{n} \right)}{K_{dr}} \dot{p}^{n}\right] \Delta t
+      \end{equation*}
+    \end{onlyenv}    
+    % Solution
+    \begin{onlyenv}<3>
+      \tikzmark{solution1-cfg}
+      \begin{cfgcode}
+        [pylithapp.problem]
+        solution = pylith.problems.SolnDispPresTracStrainVelPdotTdot
+
+        [pylithapp.problem.solution.subfields]
+        displacement.basis_order = 2
+        pressure.basis_order = 1
+        trace_strain.basis_order = 1
+        velocity.basis_order = 2
+        pressure_t.basis_order = 1
+        trace_strain_t.basis_order = 1        
+
+        [pylithapp.problem]
+        normalizer = spatialdata.units.NondimElasticQuasistatic
+        normalizer.length_scale = 100.0*m
+        normalizer.relaxation_time = 0.2*year
+        normalizer.shear_modulus = 10.0*GPa
+      \end{cfgcode}
+    \end{onlyenv}
+    %
+    % Governing equations
+    \begin{onlyenv}<4>
+      \tikzmark{material1-cfg}
+      \begin{cfgcode}
+        [pylithapp.problem]
+        materials = [crust, intrusion]
+        materials.crust = pylith.materials.Poroelasticity
+        materials.intrusion = pylith.materials.Poroelasticity
+
+        [pylithapp.problem.materials]
+        crust.bulk_rheology = pylith.materials.IsotropicLinearPoroelasticity
+        intrusion.bulk_rheology = pylith.materials.IsotropicLinearPoroelasticity
+
+        crust.use_state_variables = True
+        intrusion.use_state_variables = True
+
+        [pylithapp.problem.materials.crust]
+        description = crust
+        label_value = 1
+
+        db_auxiliary_field = spatialdata.spatialdb.UniformDB
+        db_auxiliary_field.description = Poroelastic properties for the crust
+        db_auxiliary_field.values = [solid_density, fluid_density, fluid_viscosity, porosity, shear_modulus, drained_bulk_modulus, biot_coefficient, fluid_bulk_modulus, solid_bulk_modulus, isotropic_permeability]
+        db_auxiliary_field.data   = [ 2500*kg/m**3,  1000*kg/m**3,      0.001*Pa*s,     0.01,        6e9*Pa,              10e9*Pa,              1.0,             2e9*Pa,            20e9*Pa,             1e-15*m**2]
+        ...
+      \end{cfgcode}
+    \end{onlyenv}
+    %
+    % Boundary conditions
+    \begin{onlyenv}<5>
+      \tikzmark{bc1-cfg}
+      \begin{cfgcode}
+        [pylithapp.problem]
+        bc = [bc_xneg, bc_xpos, bc_yneg, bc_ypos, bc_flow]
+
+        bc.bc_xneg = pylith.bc.DirichletTimeDependent
+        bc.bc_xpos = pylith.bc.DirichletTimeDependent
+        bc.bc_yneg = pylith.bc.DirichletTimeDependent
+        bc.bc_ypos = pylith.bc.DirichletTimeDependent
+        bc.bc_flow = pylith.bc.DirichletTimeDependent
+
+        ...
+        [pylithapp.problem.bc.bc_flow]
+        constrained_dof = [0]
+        label = boundary_flow
+        field = pressure
+        db_auxiliary_field = spatialdata.spatialdb.UniformDB
+        db_auxiliary_field.description = Flow into external boundary of conduit
+        db_auxiliary_field.values = [initial_amplitude]
+        db_auxiliary_field.data = [10.0*MPa]
+      \end{cfgcode}
+    \end{onlyenv}
+    \begin{onlyenv}<6>
+      \tikzmark{ic1-cfg}
+      \begin{cfgcode}
+        [pylithapp.problem]
+        ic = [domain]
+        ic.domain = pylith.problems.InitialConditionDomain
+
+        [pylithapp.problem.ic.domain]
+        db = spatialdata.spatialdb.UniformDB
+        db.description = Initial conditions for domain
+        db.values = [displacement_x, displacement_y, pressure, trace_strain]
+        db.data = [0.0*m, 0.0*m, 5.0*MPa, 0.0]
+      \end{cfgcode}
+    \end{onlyenv}
+  \end{minipage}
+
+    
+  \begin{tikzpicture}[overlay,remember picture]
+    \draw[physics-arrow,visible on=<3>] ($(pic cs:solution1-cfg)-(0,2em)$) to (pic cs:solution1);
+    \draw[physics-arrow,visible on=<4>] ($(pic cs:material1-cfg)-(0,2em)$) to (pic cs:material1);
+    \draw[physics-arrow,visible on=<5>] ($(pic cs:bc1-cfg)-(0,2em)$) to (pic cs:bc1);
+    \draw[physics-arrow,visible on=<6>] ($(pic cs:ic1-cfg)-(0,2em)$) to (pic cs:ic1);
+  \end{tikzpicture}
+
+  
+\end{frame}
 
 % ======================================================================
 \end{document}
